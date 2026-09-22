@@ -1,0 +1,32 @@
+# Java and Maven
+target/
+*.class
+*.jar.original
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.bak
+
+# Environment variables and credentials
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# IDE and editor settings
+.vscode/
+.idea/
+*.iml
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local analysis artifacts
+graphify-out/
