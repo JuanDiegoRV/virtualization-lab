@@ -1,6 +1,6 @@
 # virtualization-lab
 
-This repository contains the Spring Boot application used in the virtualization, Docker, and AWS EC2 workshop. It is a small web service that is built with Maven, packaged as a Docker image, run locally in isolated containers, and deployed on an EC2 virtual machine.
+This repository contains the Spring Boot application used in the virtualization, Docker, and AWS EC2 workshop. It demonstrates how a small Java web service can be built with Maven, packaged as a Docker image, executed in isolated containers, published to Docker Hub, and deployed on an Amazon EC2 virtual machine.
 
 ## Technology
 
@@ -16,16 +16,16 @@ This repository contains the Spring Boot application used in the virtualization,
 
 The application is in the `co.edu.escuelaing.virtualizationlab` package.
 
-- `RestServiceApplication` is the Spring Boot entry point. It reads the `PORT` environment variable and sets `server.port` to its value. If `PORT` is not set, it uses `9000`.
+- `RestServiceApplication` is the Spring Boot entry point. It reads the `PORT` environment variable and uses it as the HTTP listening port. If `PORT` is not defined, the current project configuration uses port `9000`.
 - `HelloRestController` exposes `GET /greeting`. The optional `name` query parameter defaults to `World`.
 
-For example:
+Example:
 
 ```text
 GET /greeting?name=Pedro
 ```
 
-returns:
+Response:
 
 ```text
 Hello, Pedro!
@@ -33,32 +33,42 @@ Hello, Pedro!
 
 ## Build and run locally
 
-Build the project from the repository root:
+Build the application from the repository root:
 
 ```bash
 mvn clean package
 ```
 
-This command removes previous build artifacts, compiles the application, runs available tests, and packages the executable JAR. At the time of this documentation, the project has no test sources, so Maven reports that no tests are run.
+This command removes previous build artifacts, compiles the application, runs the available tests, and packages the application as an executable JAR.
 
-Run the generated JAR. The application uses port `9000` by default:
+Run the generated JAR:
 
 ```bash
 java -jar target/virtualization-lab-1.0.0.jar
 ```
 
-You can provide a different port through `PORT` before running the command. For PowerShell:
+To define the port in PowerShell:
 
 ```powershell
-$env:PORT=6000
+$env:PORT="9000"
 java -jar target/virtualization-lab-1.0.0.jar
 ```
 
-Then visit `http://localhost:9000/greeting?name=Pedro`, or port `6000` when using the example above.
+Then test:
+
+```text
+http://localhost:9000/greeting?name=Pedro
+```
+
+The application can also be run directly with Maven:
+
+```bash
+mvn spring-boot:run
+```
 
 ## Docker
 
-The `Dockerfile` uses `amazoncorretto:21`, sets `/app` as the working directory, copies the Maven-built JAR as `app.jar`, defines `PORT=9000`, exposes port `9000`, and starts the application with `java -jar app.jar`.
+The `Dockerfile` uses Amazon Corretto 21 as the Java runtime, sets `/app` as the working directory, copies the Maven-built JAR as `app.jar`, defines the application port, exposes that port, and starts the application with `java -jar app.jar`.
 
 Build the image after running `mvn clean package`:
 
@@ -66,202 +76,366 @@ Build the image after running `mvn clean package`:
 docker build -t jdrvelasquez/virtualization-lab:1.0 .
 ```
 
-Run one container, mapping a host port to the internal application port:
+Run one container:
 
 ```bash
 docker run -d --name virtualization-lab-1 -e PORT=9000 -p 34000:9000 jdrvelasquez/virtualization-lab:1.0
 ```
 
-Verify it at `http://localhost:34000/greeting?name=Container`.
+Verify it at:
+
+```text
+http://localhost:34000/greeting?name=Container
+```
 
 ### Container isolation
 
-The same image can run as separate containers on one machine. Each container keeps its own process and network mapping, while the application still listens on internal port `9000`.
+The same image was executed as multiple isolated containers on the same host. Each container runs its own process and network namespace while the application continues listening on the same internal port, `9000`.
 
 ```bash
-docker run -d --name virtualization-lab-2 -p 34001:9000 jdrvelasquez/virtualization-lab:1.0
-docker run -d --name virtualization-lab-3 -p 34002:9000 jdrvelasquez/virtualization-lab:1.0
+docker run -d --name virtualization-lab-2 -e PORT=9000 -p 34001:9000 jdrvelasquez/virtualization-lab:1.0
+docker run -d --name virtualization-lab-3 -e PORT=9000 -p 34002:9000 jdrvelasquez/virtualization-lab:1.0
 ```
 
-The three mappings used in the workshop were `34000 -> 9000`, `34001 -> 9000`, and `34002 -> 9000`. They can be checked independently through their host ports.
+The mappings used were:
+
+```text
+Host 34000 -> Container 9000
+Host 34001 -> Container 9000
+Host 34002 -> Container 9000
+```
+
+This demonstrates container isolation: the three containers can use the same internal application port without conflicting because each container has an isolated network environment. Only the host-side ports must be different.
 
 ## Docker Compose
 
-`compose.yaml` defines one service named `web`. It builds from the current directory, names the container `virtualization-web`, sets `PORT` to `9000`, and maps host port `8087` to container port `9000`.
+`compose.yaml` defines one service named `web`. It builds the image from the current directory, creates the `virtualization-web` container, sets `PORT=9000`, and maps host port `8087` to container port `9000`.
 
-Start it with:
+Start the service with:
 
 ```bash
 docker compose up -d --build
 ```
 
-The command builds the image if needed and starts the service in the background. Useful follow-up commands are:
+Useful commands:
 
 ```bash
 docker compose ps
 docker compose logs web
 ```
 
-`docker compose ps` shows the state of the Compose service. `docker compose logs web` shows logs for the real service name, `web`. Test the service at `http://localhost:8087/greeting?name=Compose`.
+Test the Compose deployment at:
+
+```text
+http://localhost:8087/greeting?name=Compose
+```
 
 ## Docker Hub
 
-The published image repository is [jdrvelasquez/virtualization-lab](https://hub.docker.com/r/jdrvelasquez/virtualization-lab), with these documented tags:
+Published repository:
+
+```text
+jdrvelasquez/virtualization-lab
+```
+
+Published tags:
 
 ```text
 jdrvelasquez/virtualization-lab:1.0
 jdrvelasquez/virtualization-lab:latest
 ```
 
-Docker Hub lets another machine, including the EC2 instance, pull the image without manually transferring the source code.
+Docker Hub allows another machine, such as an EC2 instance, to download the already-built application image without transferring the source code manually.
 
 ## AWS EC2 deployment
 
-The application was deployed with the following infrastructure:
+The application was deployed successfully with the following infrastructure:
 
 | Item | Value |
 |---|---|
 | Region | `us-east-1` — US East (N. Virginia) |
 | Operating system | Amazon Linux 2023 |
 | Instance | 1 × `t3.micro` |
-| Storage | 8 GiB EBS, volume type **[PENDING CONFIRMATION]** |
+| Storage | 8 GiB EBS |
+| Cost-model EBS type | General Purpose SSD (`gp3`) |
 | Runtime assumption | 730 hours/month, continuously |
-| High availability | No; one EC2 instance |
+| High availability | No; only one EC2 instance |
 | Public application port | `8080` |
 | Internal container port | `9000` |
 
-The security group allows SSH (`TCP 22`) only from the administrator's IP. The application is publicly accessible through `TCP 8080`. Port `9000` is not opened in the security group because it remains inside the Docker port mapping.
+The Security Group allows SSH (`TCP 22`) only from the administrator's IP. The application is publicly accessible through `TCP 8080`. Port `9000` is not exposed directly in the Security Group because it remains the internal Docker application port.
 
-On EC2, the deployed mapping is `8080 -> 9000`. The verified endpoint is:
+The EC2 Docker mapping is:
+
+```text
+EC2 :8080 -> Docker container :9000
+```
+
+The deployment was verified through:
 
 ```text
 http://18.234.84.191:8080/greeting?name=AWS
 ```
 
-The public IP can change if the instance is stopped and recreated, unless an Elastic IP is associated with it.
+> The public IPv4 address can change if the instance is stopped and started again unless a static address is configured.
+
+### EC2 deployment commands
+
+After Docker was installed and the `ec2-user` was added to the Docker group, the image was downloaded from Docker Hub:
+
+```bash
+docker pull jdrvelasquez/virtualization-lab:1.0
+```
+
+The application container was started with:
+
+```bash
+docker run -d \
+  --name virtualization-lab \
+  --restart unless-stopped \
+  -e PORT=9000 \
+  -p 8080:9000 \
+  jdrvelasquez/virtualization-lab:1.0
+```
+
+Verification commands:
+
+```bash
+docker ps
+docker logs virtualization-lab
+```
 
 ## Deployment architecture
 
 ```mermaid
 flowchart TD
-    Client[Client] -->|HTTP :8080| SecurityGroup[AWS Security Group]
-    SecurityGroup --> EC2[EC2 virtual machine]
+    Client[Client] -->|HTTP :8080| SG[AWS Security Group]
+    SG --> EC2[EC2 virtual machine\nAmazon Linux 2023]
     EC2 --> Docker[Docker Engine]
-    Docker -->|8080 to 9000| Container[Java / Spring Boot container]
+    Docker -->|Host 8080 -> Container 9000| Container[Java / Spring Boot container]
     Container --> Endpoint[/greeting endpoint/]
 ```
 
-- The client sends the HTTP request.
-- The security group controls inbound traffic to the EC2 instance.
-- EC2 provides the virtual compute, memory, storage, and network resources.
-- Docker Engine runs the container on the instance.
-- The Docker container packages the application and its Java runtime environment.
-- The Java web application receives the request at `/greeting` and returns the greeting.
+Responsibilities:
 
-## Cost Analysis
+- **Client:** sends the HTTP request.
+- **Security Group:** controls which inbound network connections can reach EC2.
+- **EC2 virtual machine:** provides rented compute, memory, storage, and networking resources.
+- **Docker Engine:** creates and manages containers on the EC2 host.
+- **Docker container:** packages the application and Java runtime in a portable execution environment.
+- **Java web application:** receives the request and returns the greeting response.
 
-### Real infrastructure data
+# Cost Analysis
 
-- Region: `us-east-1`
+## Real infrastructure data
+
+- Region: `us-east-1` — US East (N. Virginia)
 - Instance: 1 × `t3.micro`
 - Storage: 8 GiB EBS
 - Operating system: Amazon Linux 2023
 - High availability: no
+- Application exposed through one public IPv4 address
 
-### Analysis assumptions
+## Analysis assumptions
 
-- Service runtime: 730 hours/month, 24/7
+To keep the comparison simple, all three workloads use the same infrastructure. The workload only changes the number of HTTP requests and the theoretical amount of outbound data.
+
+- Service runtime: 730 hours/month (24/7)
 - Average HTTP request size: 1 KB
 - Average HTTP response size: 1 KB
-- No load balancer, managed database, Auto Scaling, or backup service is included
+- No load balancer
+- No managed database
+- No Auto Scaling
+- No additional backup service
+- No second EC2 instance for high availability
+- EBS type used in the calculator: `gp3`
 
-| Scenario | Monthly requests | Monthly infrastructure cost | Estimated cost per request | Main cost drivers |
-|---|---:|---:|---:|---|
-| Small workload | 10,000 | [PENDING AWS PRICING CALCULATOR] | [PENDING] | EC2 runtime and EBS storage |
-| Medium workload | 100,000 | [PENDING AWS PRICING CALCULATOR] | [PENDING] | EC2 runtime, storage and network transfer |
-| Large workload | 1,000,000 | [PENDING AWS PRICING CALCULATOR] | [PENDING] | Instance capacity, storage and network transfer |
+### Workload assumptions
 
-| Scenario | Instances | Runtime | EBS | Estimated outbound transfer |
-|---|---:|---:|---:|---:|
-| Small workload | 1 × `t3.micro` | 730 hours/month | 8 GiB | 0.01 GB/month |
-| Medium workload | 1 × `t3.micro` | 730 hours/month | 8 GiB | 0.1 GB/month |
-| Large workload | 1 × `t3.micro` | 730 hours/month | 8 GiB | 1 GB/month |
+| Scenario | Monthly requests | Instances | Runtime | EBS | Theoretical outbound transfer |
+|---|---:|---:|---:|---:|---:|
+| Small workload | 10,000 | 1 × `t3.micro` | 730 h/month | 8 GiB | ~0.01 GB/month |
+| Medium workload | 100,000 | 1 × `t3.micro` | 730 h/month | 8 GiB | ~0.1 GB/month |
+| Large workload | 1,000,000 | 1 × `t3.micro` | 730 h/month | 8 GiB | ~1 GB/month |
 
-Once values from AWS Pricing Calculator are available, calculate each value as:
+The theoretical transfer values come from the simplified assumption of approximately 1 KB returned per request. They are workload assumptions, not measurements from production traffic.
+
+## AWS Pricing Calculator result
+
+The AWS Pricing Calculator configuration used:
+
+- US East (N. Virginia)
+- Linux
+- Shared tenancy
+- Constant usage
+- 1 × `t3.micro`
+- On-Demand
+- 100% monthly utilization
+- 8 GB `gp3` EBS
+- No snapshots
+- No detailed monitoring
+- Small network-transfer volume
+
+The calculator returned:
+
+```text
+Estimated monthly cost: USD 8.23
+Estimated 12-month cost: USD 98.76
+Upfront cost: USD 0.00
+```
+
+![AWS Pricing Calculator estimate](docs/evidence/12-aws-pricing-calculator.png)
+
+### Why do the three workloads have the same calculator cost?
+
+The Small, Medium, and Large scenarios intentionally keep the provisioned infrastructure unchanged: one `t3.micro`, the same 8 GiB EBS volume, and 730 hours of runtime each month. EC2 is therefore a mostly fixed monthly cost in this design.
+
+The expected traffic is also extremely small compared with the continuously provisioned compute capacity. The theoretical outbound values are approximately 0.01 GB, 0.1 GB, and 1 GB per month. In the calculator interface used for this workshop, transfer input was handled at whole-GB granularity, so the low-volume scenarios do not create a meaningful difference in the estimate. Consequently, the EC2 runtime and EBS storage dominate the calculation and the three scenarios remain approximately **USD 8.23/month**.
+
+This is not a claim that one `t3.micro` is guaranteed to handle every possible pattern of one million requests. The request counts are monthly totals. Real capacity depends on request complexity, concurrency, traffic peaks, CPU use, memory use, and latency requirements. A load test would be required to prove capacity under peak conditions.
+
+## Calculator-based cost per request
+
+Formula:
 
 ```text
 Estimated cost per request = monthly infrastructure cost / monthly requests
 ```
 
-An EC2 deployment has a baseline monthly cost because its compute and storage remain provisioned while the instance is running, even with few requests. That fixed cost becomes less significant per request as the same monthly cost is divided across more requests.
+Using the calculator result of USD 8.23/month:
 
-Moving beyond one instance may be necessary when CPU or memory is saturated, concurrency or latency becomes unacceptable, traffic grows, or reliability and availability requirements increase. A production deployment could also require services such as an Application Load Balancer, Auto Scaling, Amazon RDS or another managed database, CloudWatch, backups, Amazon ECR, HTTPS/TLS, and Route 53. These are not part of the current implementation.
+| Scenario | Monthly requests | Monthly infrastructure cost | Estimated cost per request | Main cost drivers |
+|---|---:|---:|---:|---|
+| Small workload | 10,000 | USD 8.23 | USD 0.000823 | EC2 runtime and EBS storage |
+| Medium workload | 100,000 | USD 8.23 | USD 0.0000823 | EC2 runtime and EBS storage |
+| Large workload | 1,000,000 | USD 8.23 | USD 0.00000823 | EC2 runtime and EBS storage; capacity should be validated under load |
 
-For a small workload of 10,000 requests per month, serverless could be more cost-effective if requests are infrequent and there are idle periods, because billing can align more closely with invocation usage. The final decision depends on the actual workload and calculator estimate.
+The important result is that the **monthly infrastructure cost stays nearly fixed while the cost per request falls as more requests share the same provisioned infrastructure**.
+
+## Independent manual cost estimate
+
+As a second estimate, independent from the calculator summary, the infrastructure can be reconstructed manually. This estimate is intentionally conservative and assumes that no Free Tier credits or promotional credits apply.
+
+### Base infrastructure
+
+| Component | Assumption | Estimated monthly cost |
+|---|---|---:|
+| EC2 compute | `t3.micro`, 730 h/month | ~USD 7.59 |
+| EBS storage | 8 GiB `gp3` | ~USD 0.64 |
+| Public IPv4 | 1 public IPv4 × 730 h/month × USD 0.005/h | ~USD 3.65 |
+| Data transfer | ≤ 1 GB/month in these scenarios | Treated as USD 0 in this base estimate |
+| **Independent total** | Before taxes and optional services | **~USD 11.88/month** |
+
+The difference between **USD 8.23** from the calculator and **USD 11.88** in this conservative manual estimate is the explicit inclusion of the public IPv4 address. Whether that IPv4 produces an actual charge can depend on the account's Free Tier eligibility and credits, so the AWS bill can differ from this manual scenario.
+
+Using the conservative manual total of USD 11.88/month:
+
+| Scenario | Monthly requests | Independent monthly estimate | Estimated cost per request |
+|---|---:|---:|---:|
+| Small workload | 10,000 | USD 11.88 | USD 0.001188 |
+| Medium workload | 100,000 | USD 11.88 | USD 0.0001188 |
+| Large workload | 1,000,000 | USD 11.88 | USD 0.00001188 |
+
+This manual estimate is a **cost-model scenario**, not a replacement for the AWS Pricing Calculator or the final AWS bill. It is useful for showing which infrastructure components are fixed and which can vary.
+
+### Pricing references for the manual estimate
+
+- AWS EC2 On-Demand pricing: https://aws.amazon.com/ec2/pricing/on-demand/
+- AWS guidance showing `t3.micro` On-Demand pricing for `us-east-1`: https://docs.aws.amazon.com/prescriptive-guidance/latest/optimize-costs-microsoft-workloads/right-size-selection.html
+- AWS EBS `gp3` pricing reference: https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-plan-storage-compare-volume-types.html
+- AWS VPC public IPv4 pricing: https://aws.amazon.com/vpc/pricing/
+
+## Architectural discussion
+
+### 1. Why does an EC2 deployment have a baseline monthly cost even with few requests?
+
+The EC2 instance and EBS storage remain provisioned while the service is running. The infrastructure therefore incurs cost even when the application is idle. Unlike a purely request-based execution model, the virtual machine is allocated continuously.
+
+### 2. At which workload level does the fixed cost become less significant per request?
+
+It becomes progressively less significant as monthly request volume increases. With the same USD 8.23 calculator cost, the estimated cost per request falls from `0.000823` USD at 10,000 requests to `0.00000823` USD at 1,000,000 requests.
+
+### 3. What could force the deployment to use multiple EC2 instances?
+
+A second or additional instance could become necessary when CPU or memory becomes saturated, concurrency increases, response latency becomes unacceptable, traffic peaks exceed the capacity of one instance, or the system requires higher availability. Request count alone is not sufficient to make this decision; measurements and load testing are required.
+
+### 4. What additional services could a production deployment require?
+
+A production architecture could add an Application Load Balancer, Auto Scaling, a managed database such as Amazon RDS, CloudWatch monitoring, backups, Amazon ECR, HTTPS/TLS certificates, DNS through Route 53, and multiple instances across Availability Zones. These services are not part of the current workshop implementation.
+
+### 5. Could serverless be more cost-effective for the small workload?
+
+Potentially. The Small scenario contains only 10,000 requests per month while the EC2 instance is assumed to run continuously for 730 hours. A serverless design can align more of the cost with actual invocations and idle time. However, the final comparison would depend on execution duration, memory allocation, request patterns, cold-start requirements, and any additional managed services used by the serverless architecture.
 
 ## Evidence
 
-Add the screenshots below to `docs/evidence/`. They are pending and are not included in this repository yet.
+The following screenshots are stored under `docs/evidence/`.
 
-### 1. Maven build — [PENDING SCREENSHOT]
+### 1. Maven build
 
-Shows the successful `mvn clean package` build.
+Shows a successful `mvn clean package` build.
 
-![PENDING: Maven build evidence](docs/evidence/01-maven-build.png)
+![Successful Maven build](docs/evidence/01-maven-build.png)
 
-### 2. Local execution — [PENDING SCREENSHOT]
+### 2. Local execution
 
 Shows the application running locally and a successful `/greeting` response.
 
-![PENDING: Local execution evidence](docs/evidence/02-local-execution.png)
+![Local greeting response](docs/evidence/02-local-greeting.png)
 
-### 3. Docker image — [PENDING SCREENSHOT]
+### 3. Docker image
 
-Shows the built Docker image in `docker images`.
+Shows `jdrvelasquez/virtualization-lab:1.0` in `docker images`.
 
-![PENDING: Docker image evidence](docs/evidence/03-docker-image.png)
+![Local Docker images and tags](docs/evidence/03-docker-local-images.png)
 
-### 4. Three containers — [PENDING SCREENSHOT]
+### 4. Three isolated containers — [PENDING SCREENSHOT]
 
-Shows the three isolated local containers and their port mappings.
+Shows the three containers with host ports `34000`, `34001`, and `34002` mapped to internal port `9000`.
 
-![PENDING: Three containers evidence](docs/evidence/04-three-containers.png)
+No uploaded screenshot shows the three containers running at the same time yet.
 
-### 5. Docker Compose — [PENDING SCREENSHOT]
+### 5. Docker Compose
 
-Shows the Compose service running and a successful request on port `8087`.
+The first screenshot shows both `docker compose up -d --build` and `docker compose ps`. The second shows the resulting container through the general `docker ps` command, and the third confirms the service response on port `8087`.
 
-![PENDING: Docker Compose evidence](docs/evidence/05-docker-compose.png)
+![Docker Compose build and startup](docs/evidence/05-docker-compose-start.png)
 
-### 6. Docker Hub — [PENDING SCREENSHOT]
+![Container created by Docker Compose shown in docker ps](docs/evidence/06-docker-container-status.png)
+
+![Greeting served through Docker Compose](docs/evidence/07-docker-compose-greeting.png)
+
+### 6. Docker Hub
 
 Shows the Docker Hub repository with tags `1.0` and `latest`.
 
-![PENDING: Docker Hub evidence](docs/evidence/06-docker-hub.png)
+![Docker Hub repository with published tags](docs/evidence/04-docker-hub-tags.png)
 
-### 7. EC2 instance — [PENDING SCREENSHOT]
+### 7. EC2 instance
 
-Shows the EC2 instance and its relevant configuration.
+Shows the `virtualization-lab` EC2 instance in the `Running` state and its relevant configuration.
 
-![PENDING: EC2 instance evidence](docs/evidence/07-ec2-instance.png)
+![EC2 instance summary](docs/evidence/08-ec2-instance-summary.png)
 
-### 8. Docker on EC2 — [PENDING SCREENSHOT]
+### 8. Docker on EC2
 
-Shows `docker ps` on the EC2 instance.
+Shows `docker ps` on the EC2 instance with the deployed container running.
 
-![PENDING: Docker on EC2 evidence](docs/evidence/08-ec2-docker-ps.png)
+![Deployed container running on EC2](docs/evidence/09-ec2-docker-ps.jpeg)
 
-### 9. Public deployment — [PENDING SCREENSHOT]
+### 9. Public deployment
 
-Shows a successful request to the public EC2 endpoint.
+Shows the successful request to the public EC2 endpoint on port `8080`.
 
-![PENDING: Public deployment evidence](docs/evidence/09-public-deployment.png)
+![Public EC2 endpoint response for Diego](docs/evidence/10-public-endpoint-diego.png)
 
-### 10. AWS Pricing Calculator — [PENDING SCREENSHOT]
+![Public EC2 endpoint response for AWS](docs/evidence/11-public-endpoint-aws.png)
 
-Shows the calculator estimate used to complete the cost table.
+### 10. AWS Pricing Calculator — INCLUDED
 
-![PENDING: AWS Pricing Calculator evidence](docs/evidence/10-aws-pricing-calculator.png)
+Shows the estimate used for the cost analysis.
+
+![AWS Pricing Calculator estimate](docs/evidence/12-aws-pricing-calculator.png)
 
 ## Project structure
 
@@ -273,6 +447,7 @@ virtualization-lab/
 │       └── RestServiceApplication.java
 ├── docs/
 │   └── evidence/
+│       └── 10-aws-pricing-calculator.png
 ├── Dockerfile
 ├── compose.yaml
 ├── pom.xml
@@ -286,10 +461,19 @@ virtualization-lab/
 - Port `8080` is the only application port exposed publicly.
 - Port `9000` remains internal to the Docker container.
 - Private keys such as `*.pem` must never be committed.
-- Environment files containing secrets must not be committed.
+- `.env` files containing secrets must not be committed.
+- The EC2 private key should preferably be stored outside the repository, for example under the user's `.ssh` directory.
 
 ## Course Framework Extension
 
 **Work in progress.**
 
-The course-framework extension is not included in this repository. It still needs concurrent request handling, graceful shutdown, configuration of the listening port through an environment variable, Docker container execution, and a successful EC2 deployment.
+The workshop also requires deploying the course's own web framework instead of Spring. This extension still needs to be completed and verified with:
+
+- concurrent request handling;
+- graceful shutdown;
+- listening port configured through an environment variable;
+- Docker container execution;
+- successful EC2 deployment.
+
+The concurrency change should be implemented in the server component that accepts client connections so that request processing does not block the accept loop. This extension must be documented separately once it is implemented and tested.
